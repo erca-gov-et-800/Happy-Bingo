@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -8,7 +9,7 @@ const { db } = require('./firebase');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN environment variable is required');
-const BOT_CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004418660495';
+const BOT_CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004489083522';
 
 const app = express();
 

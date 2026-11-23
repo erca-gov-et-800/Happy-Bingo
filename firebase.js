@@ -14,7 +14,7 @@ const {
 const secretCandidates = [
     process.env.FIREBASE_KEY_PATH,
     '/etc/secrets/firebase_key.json',
-    path.join(__dirname, 'firebase_key.json')
+    path.join(__dirname, 'firebase-service-account.json')
 ].filter(Boolean);
 
 const keyPath = secretCandidates.find(candidate =>

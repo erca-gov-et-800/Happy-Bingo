@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { Telegraf, Markup, session } = require('telegraf');
 const { db } = require('./firebase');
 

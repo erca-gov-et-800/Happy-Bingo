@@ -80,6 +80,7 @@ class GameEngine {
 
         this._seq = 0;
         this._threadRunning = false;
+        this._settling = false;
         this.on_round_result = null;
 
 
@@ -113,7 +114,7 @@ class GameEngine {
     _newRound() {
         let now = Date.now() / 1000;
 
-        this.round_id = `r${Math.floor(now * 1000)}`;
+        this.round_id = `r${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
         this.phase = 'selection';
         this.phase_ends_at = now + this.selection_seconds;
         this.cartels = {};
@@ -290,10 +291,7 @@ class GameEngine {
             console.error('Could not persist drawing round; refunding tickets:', error);
             let realPaidUids = [...new Set(Object.values(paid).map(String))];
             await this.wallet.cancel_round(rid, realPaidUids);
-            this.cartels = {};
-            this.phase = 'selection';
-            this.phase_ends_at = Date.now() / 1000 + this.selection_seconds;
-            this._seq++;
+            this._newRound();
             return;
         }
 
@@ -345,6 +343,10 @@ class GameEngine {
     }
 
     async _do_settle() {
+        if (this._settling) return;
+        this._settling = true;
+        try {
+            if (!this._pending) return;
         let rid = this.round_id;
         let tickets = { ...this.cartels };
         let pending = this._pending;
@@ -416,6 +418,9 @@ class GameEngine {
                 no_winner: this.no_winner,
                 winners: this.winners
             });
+        }
+        } finally {
+            this._settling = false;
         }
     }
 }
