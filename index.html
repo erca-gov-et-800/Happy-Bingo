@@ -41,6 +41,118 @@
     .animate-modal { animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     .nav-active { color: #ffb700 !important; border-bottom: 2px solid #ffb700; }
   </style>
+
+<style>
+/* HAPPY BINGO BLUE WHITE THEME */
+:root {
+  color-scheme: light;
+  --hb-blue: #1769e0;
+  --hb-dark-blue: #1246a0;
+  --hb-light: #f2f7ff;
+  --hb-border: #cbdcf5;
+}
+
+html, body {
+  background: #f2f7ff !important;
+  color: #17345f !important;
+}
+
+body { color: #17345f !important; }
+
+header, nav {
+  background: #ffffff !important;
+  border-color: #cbdcf5 !important;
+}
+
+[class*="bg-[#"],
+[class*="bg-gray-800"],
+[class*="bg-black/"],
+[class*="bg-[#0"],
+[class*="bg-[#1"],
+[class*="bg-[#2"] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+[class*="from-[#"],
+[class*="to-[#"] {
+  background-color: #f2f7ff !important;
+  background-image: none !important;
+}
+
+[class*="bg-yellow-"],
+[class*="bg-amber-"],
+[class*="bg-rose-"],
+[class*="from-yellow-"],
+[class*="to-amber-"] {
+  background-color: #1769e0 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+[class*="text-yellow-"],
+[class*="text-amber-"],
+[class*="text-rose-"] {
+  color: #1769e0 !important;
+}
+
+[class*="text-gray-"],
+[class*="text-white"] {
+  color: #17345f !important;
+}
+
+[class*="border-yellow-"],
+[class*="border-amber-"],
+[class*="border-[#"],
+[class*="border-gray-"] {
+  border-color: #cbdcf5 !important;
+}
+
+[class*="bg-yellow-"] [class*="text-"],
+[class*="bg-amber-"] [class*="text-"] {
+  color: #ffffff !important;
+}
+
+button[class*="bg-yellow-"],
+button[class*="bg-amber-"],
+button[class*="bg-rose-"] {
+  background: #1769e0 !important;
+  color: #ffffff !important;
+}
+
+.nav-active {
+  color: #1769e0 !important;
+  border-bottom: 2px solid #1769e0 !important;
+}
+
+#cartel-grid button {
+  border-color: #cbdcf5 !important;
+}
+
+#cartel-grid button:not([disabled]) {
+  background: #ffffff !important;
+  color: #1769e0 !important;
+}
+
+#master-board-grid [class*="bg-yellow-"],
+#master-board-grid [class*="bg-amber-"] {
+  background: #1769e0 !important;
+  color: #ffffff !important;
+}
+
+input, textarea, select {
+  background: #ffffff !important;
+  color: #17345f !important;
+  border-color: #cbdcf5 !important;
+}
+
+::-webkit-scrollbar-track { background: #f2f7ff; }
+::-webkit-scrollbar-thumb {
+  background: #1769e0;
+  border-radius: 4px;
+}
+</style>
+
 </head>
 <body class="h-full text-white font-sans antialiased flex flex-col overflow-x-hidden select-none">
 
