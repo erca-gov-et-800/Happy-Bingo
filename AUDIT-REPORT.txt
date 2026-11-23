@@ -1,0 +1,35 @@
+HAPPY BINGO — STATIC AUDIT & PATCH REPORT
+========================================
+
+Changes applied
+---------------
+1. Removed synthetic/fake player name data and all fake-player queue/injection methods.
+2. Removed fake-player seats from the round lock and settlement paths. Only numeric Telegram user IDs are accepted into paid rounds and winner payouts.
+3. Removed the fake-bot forced-win probability path.
+4. Removed the admin fake-bot settings panel, client functions, server endpoints, and startup settings loader.
+5. Removed the old deposited-user win restriction. Deposited players are not artificially prevented from winning.
+6. Changed the draw-order shuffle to crypto.randomInt for an unbiased cryptographic shuffle.
+7. Recorded won_after_deposit when a real user wins after an approved deposit, fixing the withdrawal eligibility flag that was not being set.
+8. Removed hard-coded default admin Telegram ID. Set ADMIN_ID / ADMIN_IDS in Render.
+9. Made WEBAPP_URL required rather than silently falling back to the old XLite Bingo URL.
+10. Updated visible branding and package metadata to Happy Bingo.
+11. Corrected the malformed withdrawal error message text.
+
+Checks performed
+----------------
+- node --check: server.js, bot.js, users.js, gameroom.js — PASS.
+- Inline JavaScript syntax: index.html, admin.html — PASS.
+- Game logic test: fake-player injection methods absent; selected players are numeric Telegram IDs; a real card's actual Bingo line triggers a win — PASS.
+- Wallet settlement test: win payout is credited and won_after_deposit is recorded when has_deposited is true — PASS.
+
+Important limitations / deployment checklist
+---------------------------------------------
+- These are static/local tests. No live Telegram Bot API, Render deployment, or Firebase production end-to-end test was performed.
+- Before deployment, configure BOT_TOKEN, WEBAPP_URL, ADMIN_ID (and optional ADMIN_IDS), FIREBASE_KEY_PATH, FIREBASE_DATABASE_URL, BOT_CHANNEL_ID, BOT_CHANNEL_URL, and SUPPORT_CONTACT in Render.
+- Confirm the Telebirr account name/number and deposit instructions in Render before accepting real payments.
+- The Realtime Database adapter uses a process-local transaction queue. Keep the Render service at ONE instance as documented; do not scale horizontally without replacing the adapter with cross-instance atomic transactions.
+- Back up Firebase Realtime Database before deploying. Existing Firestore records are not automatically migrated into Realtime Database.
+- Test deposit approval, withdrawal rejection/refund, withdrawal approval/manual payout, referral bonus, and full round settlement using small test amounts before public launch.
+- Real-money gaming may be subject to local laws and payment-provider rules. Confirm legal and provider requirements before enabling real-money play.
+
+The source ZIP contained no BOT_TOKEN or Firebase service-account key. Do not add either secret to GitHub or the ZIP.

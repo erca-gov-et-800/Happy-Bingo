@@ -1,0 +1,23 @@
+node_modules/
+.env
+.env.*
+!.env.example
+firebase_key.json
+service-account*.json
+*service-account*.json
+*.log
+.DS_Store
+
+# Firebase secrets
+firebase-service-account.json
+firebase-service-account*.json
+
+# Local backups
+*.backup
+*.rtdb-backup
+
+# Accidental temporary files
+--exclude-dir=.git
+--exclude-dir=node_modules
+--include=*.js
+old-rtdb-readonly-check*
