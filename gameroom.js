@@ -245,8 +245,46 @@ class GameEngine {
         this._botsInjected = false;
         this.botQueue = [];
         this.botInjectIndex = 0;
+        this._stateDirty = false;
+        this._lockRecovery = null;
 
         this._seq++;
+    }
+
+    _persistentState() {
+        return {
+            phase: this.phase,
+            draw_order: this.draw_order,
+            drawn: this.drawn,
+            next_draw_at: this.next_draw_at,
+            phase_ends_at: this.phase_ends_at,
+            pending: this._pending,
+            winners: this.winners,
+            no_winner: this.no_winner,
+            restricted_users: [...(this.restrictedUsers || [])],
+            bot_profiles: this.botProfiles || {}
+        };
+    }
+
+    restore_round(activeRound) {
+        const state = activeRound.game_state;
+
+        this.round_id = activeRound.round_id;
+        this.cartels = activeRound.tickets;
+        this.phase = state.phase;
+        this.draw_order = state.draw_order;
+        this.drawn = state.drawn;
+        this.next_draw_at = state.next_draw_at;
+        this.phase_ends_at = state.phase_ends_at || 0;
+        this._pending = state.pending || null;
+        this.winners = state.winners || [];
+        this.no_winner = !!state.no_winner;
+        this.restrictedUsers = new Set(state.restricted_users || []);
+        this.botProfiles = state.bot_profiles || {};
+        this._stateDirty = false;
+        this._seq++;
+
+        console.log(`Resumed drawing round ${this.round_id} (${this.drawn.length}/${BALLS} drawn).`);
     }
 
     async pick(uid, cartel) {
@@ -359,15 +397,56 @@ class GameEngine {
                     await this._do_lock(this.cartels);
                 }
             }
+        } else if (this.phase === 'locking') {
+            if (this._lockRecovery) {
+                const recovery = this._lockRecovery;
+                try {
+                    await this.wallet.cancel_round(
+                        recovery.roundId,
+                        recovery.userIds
+                    );
+                    this._lockRecovery = null;
+                    this._newRound();
+                } catch (error) {
+                    console.error(
+                        'Round refund retry failed; recovery remains pending:',
+                        error
+                    );
+                }
+            }
         } else if (this.phase === 'drawing') {
+            // Retry saving a previous draw before drawing another number.
+            if (this._stateDirty) {
+                await this.wallet.save_drawing_state(
+                    this.round_id,
+                    this._persistentState()
+                );
+                this._stateDirty = false;
+            }
+
             if (now >= this.next_draw_at) {
                 this._draw_one(now);
+
+                if (this._stateDirty) {
+                    await this.wallet.save_drawing_state(
+                        this.round_id,
+                        this._persistentState()
+                    );
+                    this._stateDirty = false;
+                }
             }
 
             if (this.phase === 'settling') {
                 await this._do_settle();
             }
         } else if (this.phase === 'settling') {
+            if (this._stateDirty) {
+                await this.wallet.save_drawing_state(
+                    this.round_id,
+                    this._persistentState()
+                );
+                this._stateDirty = false;
+            }
             await this._do_settle();
         } else if (this.phase === 'result') {
             if (now >= this.phase_ends_at) {
@@ -429,83 +508,97 @@ class GameEngine {
     }
 
     async _do_lock(snapshot) {
-        let rid = this.round_id;
+        const rid = this.round_id;
+        const safeSnapshot = { ...snapshot };
 
-        await this.wallet.begin_round(rid, snapshot);
-
-        let realSnapshot = {};
-        for (let [cartel, uid] of Object.entries(snapshot)) {
+        const realSnapshot = {};
+        for (const [cartel, uid] of Object.entries(safeSnapshot)) {
             if (!String(uid).startsWith('bot_')) {
                 realSnapshot[cartel] = uid;
             }
         }
 
-        let byUser = {};
-
-        for (let [cartel, uid] of Object.entries(realSnapshot)) {
-            if (!byUser[uid]) byUser[uid] = [];
-            byUser[uid].push(Number(cartel));
-        }
-
-        let paid = {};
-        this.restrictedUsers = new Set();
-
-        for (let [uid, cartels] of Object.entries(byUser)) {
-            let res = await this.wallet.charge(
-                uid,
-                cartels.length * TICKET_PRICE,
-                rid,
-                cartels.length
-            );
-
-            if (res !== null) {
-                for (let c of cartels) paid[c] = uid;
-
-                if (this.botSettings.restrictDepositedWin) {
-                    const prof = await this.wallet.profile(uid);
-                    if (prof && prof.has_deposited) {
-                        this.restrictedUsers.add(String(uid));
-                    }
-                }
-            } else {
-                await this.wallet.refund(uid, rid);
-            }
-        }
-
-        for (let [cartel, uid] of Object.entries(snapshot)) {
-            if (String(uid).startsWith('bot_')) {
-                paid[cartel] = uid;
-            }
-        }
-
-        this.cartels = paid;
+        const realUserIds = [...new Set(Object.values(realSnapshot).map(String))];
 
         try {
-            await this.wallet.start_drawing(rid, paid);
-        } catch (error) {
-            console.error('Could not persist drawing round; refunding tickets:', error);
-            let realPaidUids = [...new Set(Object.values(paid).filter(u => !String(u).startsWith('bot_')))];
-            await this.wallet.cancel_round(rid, realPaidUids);
-            this.cartels = {};
-            this.phase = 'selection';
-            this.phase_ends_at = Date.now() / 1000 + this.selection_seconds;
+            await this.wallet.begin_round(rid, safeSnapshot);
+
+            const byUser = {};
+            for (const [cartel, uid] of Object.entries(realSnapshot)) {
+                if (!byUser[uid]) byUser[uid] = [];
+                byUser[uid].push(Number(cartel));
+            }
+
+            const paid = {};
+            this.restrictedUsers = new Set();
+
+            for (const [uid, cartels] of Object.entries(byUser)) {
+                const res = await this.wallet.charge(
+                    uid,
+                    cartels.length * TICKET_PRICE,
+                    rid,
+                    cartels.length
+                );
+
+                if (res !== null) {
+                    for (const c of cartels) paid[c] = uid;
+
+                    if (this.botSettings.restrictDepositedWin) {
+                        const prof = await this.wallet.profile(uid);
+                        if (prof && prof.has_deposited) {
+                            this.restrictedUsers.add(String(uid));
+                        }
+                    }
+                } else {
+                    await this.wallet.refund(uid, rid);
+                }
+            }
+
+            for (const [cartel, uid] of Object.entries(safeSnapshot)) {
+                if (String(uid).startsWith('bot_')) {
+                    paid[cartel] = uid;
+                }
+            }
+
+            this.cartels = paid;
+
+            const order = Array.from({ length: BALLS }, (_, i) => i + 1);
+            for (let i = order.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [order[i], order[j]] = [order[j], order[i]];
+            }
+
+            this.draw_order = order;
+            this.drawn = [];
+            this.phase = 'drawing';
+            this.next_draw_at = Date.now() / 1000 + this.first_draw_delay;
+            this._stateDirty = false;
             this._seq++;
-            return;
+
+            await this.wallet.start_drawing(
+                rid,
+                paid,
+                this._persistentState()
+            );
+
+        } catch (error) {
+            console.error('Round locking failed:', error);
+
+            this._lockRecovery = {
+                roundId: rid,
+                userIds: realUserIds
+            };
+
+            try {
+                await this.wallet.cancel_round(rid, realUserIds);
+                this._lockRecovery = null;
+                this._newRound();
+            } catch (refundError) {
+                console.error('Round refund failed; will retry:', refundError);
+                this.phase = 'locking';
+                this._seq++;
+            }
         }
-
-        let order = Array.from({ length: BALLS }, (_, i) => i + 1);
-
-        for (let i = order.length - 1; i > 0; i--) {
-            let j = Math.floor(Math.random() * (i + 1));
-            [order[i], order[j]] = [order[j], order[i]];
-        }
-
-        this.draw_order = order;
-        this.drawn = [];
-        this.phase = 'drawing';
-        this.next_draw_at = Date.now() / 1000 + this.first_draw_delay;
-
-        this._seq++;
     }
 
     _draw_one(now) {
@@ -550,6 +643,8 @@ class GameEngine {
                     const luckyCartel = nonRestrictedCartels[Math.floor(Math.random() * nonRestrictedCartels.length)];
                     this._pending = ['win', [luckyCartel]];
                     this.phase = 'settling';
+                    this._stateDirty = true;
+                    this._seq++;
                     return;
                 }
             }
@@ -557,6 +652,7 @@ class GameEngine {
 
         let number = chosenNumber;
         this.drawn.push(number);
+        this._stateDirty = true;
         this._seq++;
 
         let drawnSet = new Set(this.drawn);
@@ -625,10 +721,8 @@ class GameEngine {
                 profiles[uid] = await this.wallet.profile(uid) || {};
             }
 
-            if (Object.keys(payouts).length > 0) {
-                await this.wallet.prepare_settlement(rid, payouts);
-                await this.wallet.settle(rid, payouts);
-            }
+            await this.wallet.prepare_settlement(rid, payouts);
+            await this.wallet.settle(rid, payouts);
 
             this.winners = realWinnersList.map(w => {
                 const isBot = String(w.uid).startsWith('bot_');

@@ -142,7 +142,10 @@ db.collection('settings').doc('bot_settings').get().then(doc => {
 }).catch(err => console.warn('Could not load bot settings at startup:', err));
 
 wallet.recover_unsettled()
-    .then(() => engine.start())
+    .then(activeRound => {
+        if (activeRound) engine.restore_round(activeRound);
+        engine.start();
+    })
     .catch(error => {
         console.error('Game recovery failed; engine was not started:', error);
         process.exit(1);

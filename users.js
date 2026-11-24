@@ -171,10 +171,47 @@ class FirestoreWallet {
         this.cache_drop(userId);
     }
 
-    async start_drawing(roundId, tickets) {
-        await this.db.collection('rounds').doc(String(roundId)).update({
-            status: 'drawing',
-            tickets
+    async start_drawing(roundId, tickets, gameState) {
+        const roundRef = this.db.collection('rounds').doc(String(roundId));
+
+        await this.db.runTransaction(async transaction => {
+            const roundDoc = await transaction.get(roundRef);
+
+            if (!roundDoc.exists) {
+                throw new Error(`Round ${String(roundId)} does not exist.`);
+            }
+
+            if (roundDoc.data().status !== 'locked') {
+                throw new Error(
+                    `Cannot start drawing for round ${String(roundId)} with status ${roundDoc.data().status}.`
+                );
+            }
+
+            transaction.update(roundRef, {
+                status: 'drawing',
+                tickets,
+                game_state: gameState,
+                game_state_saved_at: new Date().toISOString()
+            });
+        });
+    }
+
+    async save_drawing_state(roundId, gameState) {
+        const roundRef = this.db.collection('rounds').doc(String(roundId));
+
+        await this.db.runTransaction(async transaction => {
+            const roundDoc = await transaction.get(roundRef);
+
+            if (!roundDoc.exists || roundDoc.data().status !== 'drawing') {
+                throw new Error(
+                    `Cannot save drawing state for round ${String(roundId)}.`
+                );
+            }
+
+            transaction.update(roundRef, {
+                game_state: gameState,
+                game_state_saved_at: new Date().toISOString()
+            });
         });
     }
 
@@ -260,29 +297,104 @@ class FirestoreWallet {
     async recover_unsettled() {
         const snapshot = await this.db.collection('rounds').get();
         let recovered = 0;
+        let activeRound = null;
 
         for (const doc of snapshot.docs) {
             const round = doc.data() || {};
             if (!['locked', 'drawing', 'settling'].includes(round.status)) continue;
 
-            // A prepared settlement is safe to resume because each user's payout
-            // is recorded transactionally and cannot be credited twice.
             if (round.status === 'settling' && round.payouts &&
                 typeof round.payouts === 'object') {
                 await this.settle(doc.id, round.payouts);
-            } else {
-                // If the process stopped before a complete payout was prepared,
-                // refund every charged participant. refund() is idempotent.
-                const ticketMap = round.tickets || round.snapshot || {};
-                const userIds = [...new Set(Object.values(ticketMap).map(String))];
-                await this.cancel_round(doc.id, userIds);
+                recovered++;
+                continue;
             }
 
+            const state = round.game_state;
+            const tickets = round.tickets || {};
+            const order = state && state.draw_order;
+            const drawn = state && state.drawn;
+
+            const validOrder =
+                Array.isArray(order) &&
+                order.length === 75 &&
+                order.every(n => Number.isInteger(n) && n >= 1 && n <= 75) &&
+                new Set(order).size === 75;
+
+            const validDrawn =
+                Array.isArray(drawn) &&
+                drawn.length <= 75 &&
+                validOrder &&
+                drawn.every((n, i) => n === order[i]);
+
+            const validPhase =
+                state && ['drawing', 'settling'].includes(state.phase);
+
+            const validPending =
+                state && (
+                    (state.phase === 'drawing' && state.pending == null) ||
+                    (state.phase === 'settling' &&
+                        Array.isArray(state.pending) &&
+                        (
+                            (state.pending[0] === 'win' &&
+                                Array.isArray(state.pending[1]) &&
+                                state.pending[1].length > 0) ||
+                            (state.pending[0] === 'none' &&
+                                Array.isArray(state.pending[1]) &&
+                                state.pending[1].length === 0)
+                        ))
+                );
+
+            const validTiming =
+                state &&
+                (state.phase === 'settling' ||
+                    (Number.isFinite(state.next_draw_at) &&
+                        state.next_draw_at > 0));
+
+            const validTickets =
+                tickets &&
+                typeof tickets === 'object' &&
+                !Array.isArray(tickets) &&
+                Object.keys(tickets).length > 0 &&
+                Object.entries(tickets).every(([cartel, uid]) =>
+                    /^\d+$/.test(cartel) &&
+                    Number(cartel) >= 1 &&
+                    Number(cartel) <= 500 &&
+                    (/^\d+$/.test(String(uid)) || /^bot_\d+$/.test(String(uid)))
+                );
+
+            const canResume =
+                round.status === 'drawing' &&
+                validTickets &&
+                validOrder &&
+                validDrawn &&
+                validPhase &&
+                validPending &&
+                validTiming;
+
+            if (canResume && activeRound === null) {
+                activeRound = {
+                    round_id: doc.id,
+                    tickets,
+                    game_state: state
+                };
+                recovered++;
+                console.log(`Found resumable drawing round ${doc.id}.`);
+                continue;
+            }
+
+            // Refund locked, invalid, or additional unfinished rounds.
+            const ticketMap = round.tickets || round.snapshot || {};
+            const userIds = [...new Set(Object.values(ticketMap).map(String))];
+            await this.cancel_round(doc.id, userIds);
             recovered++;
         }
 
         console.log(`Recovered ${recovered} unfinished round(s).`);
-        return recovered;
+        if (activeRound) {
+            console.log(`One drawing round will resume: ${activeRound.round_id}`);
+        }
+        return activeRound;
     }
 }
 
