@@ -50,6 +50,17 @@ class FirestoreWallet {
             const data = userDoc.data();
             const balance = Number(data.balance || 0);
             const bonus = Number(data.bonus || 0);
+            const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
+
+            // Make charging idempotent across retries for the same round.
+            const existingPlay = txs.find(t =>
+                t && t.type === 'play' && String(t.round_id) === String(roundId)
+            );
+            if (existingPlay) {
+                const previousAmount = Number(existingPlay.amount || 0);
+                if (Math.abs(previousAmount - amount) > 1e-9) return null;
+                return { balance, bonus };
+            }
 
             if (balance + bonus + 1e-9 < amount) return null;
 
@@ -58,7 +69,6 @@ class FirestoreWallet {
             const newBalance = Math.max(0, balance - fromMain);
             const newBonus = Math.max(0, bonus - fromBonus);
             const weeklyCartels = (Number(data.weekly_cartels) || 0) + cartels;
-            const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
 
             txs.push({
                 type: 'play',
