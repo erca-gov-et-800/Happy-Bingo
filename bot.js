@@ -4,11 +4,10 @@ const { admin, db } = require('./firebase');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN environment variable is required');
 
-const WEBAPP_URL = process.env.WEBAPP_URL;
-if (!WEBAPP_URL) throw new Error('WEBAPP_URL environment variable is required');
-const CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004418660495';
-const CHANNEL_URL = process.env.BOT_CHANNEL_URL || 'https://t.me/test16746g';
-const ADMIN_IDS = new Set([...(process.env.ADMIN_ID || '').split(','), ...(process.env.ADMIN_IDS || '').split(',')].map(v => v.trim()).filter(Boolean));
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://happy-bingo-app.onrender.com';
+const CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004489083522';
+const CHANNEL_URL = process.env.BOT_CHANNEL_URL || 'https://t.me/HappyBingo1256';
+const ADMIN_IDS = new Set([...(process.env.ADMIN_ID || '7171741383').split(','), ...(process.env.ADMIN_IDS || '').split(',')].map(v => v.trim()).filter(Boolean));
 
 const REGISTRATION_BONUS = Number(process.env.REGISTRATION_BONUS_ETB || 10);
 const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_ETB || 20);
@@ -16,10 +15,11 @@ const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_ETB || 20);
 const DEPOSIT_MINIMUM = Math.max(100, Number(process.env.DEPOSIT_MINIMUM_ETB || 100));
 const WITHDRAW_MINIMUM = Math.max(1, Number(process.env.WITHDRAW_MINIMUM_ETB || 100));
 const DEPOSIT_INSTRUCTIONS = process.env.DEPOSIT_INSTRUCTIONS ||
-    '💰 ሂሳብ ለመሙላት Telebirr ይምረጡ።\n\nአነስተኛ መጠን: 100 ETB\n👤 ስም: Esraeal\n📱 አካውንት: 0949196145\n\nብሩን ከላኩ በኋላ የክፍያ ማረጋገጫ SMS ወይም የደረሰኝ ፎቶ (Screenshot) ይላኩ። አድሚኑ ካረጋገጠው በኋላ Bonus Balance ይጨመራል።';
+    '💰 ሂሳብ ለመሙላት Telebirr ይምረጡ።\n\nአነስተኛ መጠን: 100 ETB\n👤 ስም: aeal\n📱 አካውንት: 0945342345\n\nብሩን ከላኩ በኋላ የክፍያ ማረጋገጫ SMS ወይም የደረሰኝ ፎቶ (Screenshot) ይላኩ። አድሚኑ ካረጋገጠው በኋላ Bonus Balance ይጨመራል።';
+const ADMIN_ID = (process.env.ADMIN_ID || '7171741383').split(',')[0].trim();
 const ADMIN_ID_LIST = [...new Set([...ADMIN_IDS])];
 
-const SUPPORT_CONTACT = process.env.SUPPORT_CONTACT || '@your_support_username';
+const SUPPORT_CONTACT = process.env.SUPPORT_CONTACT || '@happysupporter_bot';
 
 if (!CHANNEL_ID || !CHANNEL_URL) {
     console.warn('BOT_CHANNEL_ID and BOT_CHANNEL_URL must be set to enforce mandatory channel joining.');
@@ -64,17 +64,17 @@ async function isChannelMember(ctx) {
 
 async function askToJoin(ctx) {
     return ctx.reply(
-        '👋 ወደ HAPPY BINGO እንኳን በደህና መጡ!\n\nቀጥለው ለመሄድ መጀመሪያ የTelegram ቻናላችንን ይቀላቀሉ። ከገቡ በኋላ “✅ ቻናሉን ተቀላቅያለሁ” ይጫኑ።',
+        '👋 ወደ MELBET BINGO እንኳን በደህና መጡ!\n\nቀጥለው ለመሄድ መጀመሪያ የTelegram ቻናላችንን ይቀላቀሉ። ከገቡ በኋላ “✅ ቻናሉን ተቀላቅያለሁ” ይጫኑ።',
         Markup.inlineKeyboard([
             [Markup.button.url('📢 ቻናሉን ተቀላቀል', CHANNEL_URL)],
-            [Markup.button.callback('✅ Happy Bingo ቻናሉን ተቀላቅያለሁ', 'verify_channel')]
+            [Markup.button.callback('✅ MELBET ቻናሉን ተቀላቅያለሁ', 'verify_channel')]
         ])
     );
 }
 
 function askForContact(ctx) {
     return ctx.reply(
-        '✅ Happy Bingo ቻናሉን በትክክል ተቀላቅለዋል።\n\nምዝገባውን ለማጠናቀቅ የራስዎን ስልክ ቁጥር ያጋሩ።',
+        '✅ MELBET ቻናሉን በትክክል ተቀላቅለዋል።\n\nምዝገባውን ለማጠናቀቅ የራስዎን ስልክ ቁጥር ያጋሩ።',
         Markup.keyboard([
             [Markup.button.contactRequest('📱 ስልክ ቁጥሮን አጋራ')]
         ]).resize().oneTime()
@@ -87,7 +87,7 @@ async function showMainMenu(ctx) {
     const replyMarkup = {
         inline_keyboard: [
             [
-                { text: "🎮 Play Happy Bingo", web_app: { url: WEBAPP_URL }, style: "primary" }
+                { text: "🎮 Play Melbet Bingo", web_app: { url: WEBAPP_URL }, style: "primary" }
             ],
             [
                 { text: "💵 Balance", callback_data: "account", style: "success" },
