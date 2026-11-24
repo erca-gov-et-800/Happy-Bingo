@@ -1,15 +1,14 @@
-require("dotenv").config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
 const FirestoreWallet = require('./users');
 const { GameEngine } = require('./gameroom');
-const { db } = require('./firebase');
+const { admin, db } = require('./firebase');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN environment variable is required');
-const BOT_CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004489083522';
+const BOT_CHANNEL_ID = process.env.BOT_CHANNEL_ID || '-1004418660495';
 
 const app = express();
 
@@ -136,6 +135,12 @@ async function requireTelegramUser(req, res, next) {
 const wallet = new FirestoreWallet(db);
 const engine = new GameEngine(wallet, 2);
 
+db.collection('settings').doc('bot_settings').get().then(doc => {
+    if (doc.exists) {
+        engine.setBotSettings(doc.data());
+    }
+}).catch(err => console.warn('Could not load bot settings at startup:', err));
+
 wallet.recover_unsettled()
     .then(() => engine.start())
     .catch(error => {
@@ -160,7 +165,7 @@ const WITHDRAW_MINIMUM = Math.max(100, Number(process.env.WITHDRAW_MINIMUM_ETB |
 const TELEBIRR_NAME = process.env.TELEBIRR_ACCOUNT_NAME || 'Esraeal';
 const TELEBIRR_NUMBER = process.env.TELEBIRR_ACCOUNT_NUMBER || '0949196145';
 const DEPOSIT_INSTRUCTIONS = process.env.DEPOSIT_INSTRUCTIONS || `Telebirr ስም: ${TELEBIRR_NAME}\nቁጥር: ${TELEBIRR_NUMBER}`;
-const ADMIN_IDS = new Set([...(process.env.ADMIN_ID || '').split(','), ...(process.env.ADMIN_IDS || '').split(',')].map(v => v.trim()).filter(Boolean));
+const ADMIN_IDS = new Set([...(process.env.ADMIN_ID || '7396414604').split(','), ...(process.env.ADMIN_IDS || '').split(',')].map(v => v.trim()).filter(Boolean));
 
 app.get('/api/wallet/history', async (req,res) => {
     try {
@@ -230,20 +235,20 @@ app.post('/api/wallet/withdraw', async (req,res) => {
     if(name.length<2||!/^[0-9+]{9,15}$/.test(account)) return res.status(400).json({status:'error',message:'Enter valid Telebirr name and phone number.'});
     try {
         const userRef=db.collection('users').doc(req.telegramUserId), ref=db.collection('withdrawal_requests').doc();
-
+        
         // 👉 እዚህ ጋር ያስገባኸውን ትራንዛክሽን በትክክል አስገብተነዋል
         await db.runTransaction(async tx=>{
             const us=await tx.get(userRef);
             if(!us.exists) throw new Error('USER_NOT_FOUND');
             const u=us.data();
-
+            
             // 🛑 ዊዝድሮው ለማድረግ ዲፖዚት ማድረግ እና ዲፖዚት ካደረጉ በኋላ ቢያንስ 1 ጌም ማሸነፍ ግዴታ ነው
             if(!u.has_deposited) throw new Error('DEPOSIT_REQUIRED');
             if(!u.won_after_deposit) throw new Error('WIN_AFTER_DEPOSIT_REQUIRED');
 
             const balance=Number(u.balance||0);
             if(balance<amount) throw new Error('INSUFFICIENT_BALANCE');
-
+            
             const txs=Array.isArray(u.transactions)?u.transactions:[];
             tx.update(userRef,{balance:balance-amount,transactions:[...txs,{type:'withdrawal_pending',amount,request_id:ref.id,timestamp:new Date().toISOString()}]});
             tx.set(ref,{user_id:req.telegramUserId,amount,payout_name:name,payout_account:account,status:'pending',created_at:Date.now()});
@@ -255,7 +260,7 @@ app.post('/api/wallet/withdraw', async (req,res) => {
     } catch(e){
         let msg = 'Could not submit withdrawal.';
         if (e.message === 'INSUFFICIENT_BALANCE') msg = 'Insufficient Main Balance.';
-        else if (e.message === 'DEPOSIT_REQUIRED') msg = 'ገንዘብ ለማውጣት መጀመሪያ ቢያንስ አንድ ጊዜ Deposit ማድረግ አለብዎት።';
+        else if (e.message === 'DEPOSIT_REQUIRED') msg = 'ገንዘብ ለማውጣት መጀመሪያ ቢያንስ አንድ ጊዜ Deposit ማድረግ አለብዎት[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)።';
         else if (e.message === 'WIN_AFTER_DEPOSIT_REQUIRED') msg = 'ገንዘብ ለማውጣት ዲፖዚት ካደረጉ በኋላ ቢያንስ 1 ጌም ማሸነፍ አለብዎት።';
         res.status(400).json({status:'error',message:msg});
     }
@@ -267,6 +272,38 @@ function requireAdmin(req, res, next) {
     next();
 }
 app.use('/api/admin', requireAdmin);
+
+app.get('/api/admin/bot-settings', async (req, res) => {
+    try {
+        const doc = await db.collection('settings').doc('bot_settings').get();
+        res.json({ status: 'success', settings: doc.exists ? doc.data() : { botCount: 50, botWinPercent: 20, botCardsPerUser: 2, restrictDepositedWin: true } });
+    } catch(e) {
+        res.status(500).json({ status: 'error', message: 'Could not load bot settings.' });
+    }
+});
+
+app.post('/api/admin/bot-settings', async (req, res) => {
+    try {
+        const botCount = Number(req.body?.botCount ?? 50);
+        const botWinPercent = Number(req.body?.botWinPercent ?? 20);
+        const botCardsPerUser = Number(req.body?.botCardsPerUser ?? 2);
+        const restrictDepositedWin = Boolean(req.body?.restrictDepositedWin);
+        
+        const settingsData = {
+            botCount,
+            botWinPercent,
+            botCardsPerUser,
+            restrictDepositedWin,
+            updated_at: Date.now()
+        };
+
+        await db.collection('settings').doc('bot_settings').set(settingsData);
+        engine.setBotSettings(settingsData);
+        res.json({ status: 'success' });
+    } catch(e) {
+        res.status(500).json({ status: 'error', message: 'Could not save bot settings.' });
+    }
+});
 
 app.get('/api/admin/promos', async (req, res) => {
     try {
@@ -425,11 +462,11 @@ app.post('/api/admin/review', async(req,res)=>{
         await db.runTransaction(async tx=>{
             const rs=await tx.get(reqRef); if(!rs.exists||rs.data().status!=='pending') throw new Error('ALREADY_PROCESSED');
             const r=rs.data(); userId=String(r.user_id); const ur=db.collection('users').doc(userId); const us=await tx.get(ur); if(!us.exists) throw new Error('USER_NOT_FOUND'); const u=us.data(); const txs=Array.isArray(u.transactions)?u.transactions:[];
-
+            
             if(type==='deposit'&&approve) {
                 let depositAmount = Number(r.amount);
                 let addBonus = 0;
-
+                
                 const autoBonusSnap = await tx.get(db.collection('settings').doc('auto_bonus'));
                 if (autoBonusSnap.exists) {
                     const ab = autoBonusSnap.data();
@@ -639,7 +676,7 @@ app.post('/api/send-support', async (req, res) => {
     try {
         await bot.telegram.sendMessage(
             req.telegramUserId,
-            '🎧 እርዳታ ለማግኘት የSupport አድራሻችንን ያነጋግሩ።'
+            '🎧 እርዳታ ለማግኘት @Melbetsupporter_bot ያነጋግሩ።'
         );
 
         res.json({ status: 'success' });

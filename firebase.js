@@ -1,45 +1,27 @@
+const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
-
-const {
-    initializeApp,
-    getApps,
-    cert
-} = require('firebase-admin/app');
-
-const {
-    getFirestore
-} = require('firebase-admin/firestore');
+const createRealtimeStore = require('./rtdb-store');
 
 const secretCandidates = [
     process.env.FIREBASE_KEY_PATH,
     '/etc/secrets/firebase_key.json',
-    path.join(__dirname, 'firebase-service-account.json')
+    path.join(__dirname, 'firebase_key.json')
 ].filter(Boolean);
 
-const keyPath = secretCandidates.find(candidate =>
-    fs.existsSync(path.resolve(candidate))
-);
-
+const keyPath = secretCandidates.find(candidate => fs.existsSync(candidate));
 if (!keyPath) {
-    throw new Error(
-        'Firebase service account file not found. Set FIREBASE_KEY_PATH.'
-    );
+    throw new Error('Firebase service account file not found. Set FIREBASE_KEY_PATH=/etc/secrets/firebase_key.json in Render.');
 }
 
-const serviceAccount = require(path.resolve(keyPath));
-
-const app = getApps().length
-    ? getApps()[0]
-    : initializeApp({
-        credential: cert(serviceAccount),
-        projectId: serviceAccount.project_id
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert(require(keyPath)),
+        databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://litebingo-513a9-default-rtdb.firebaseio.com'
     });
+}
 
-const db = getFirestore(app);
+const realtimeDb = admin.database();
+const db = createRealtimeStore(realtimeDb);
 
-db.settings({
-    ignoreUndefinedProperties: true
-});
-
-module.exports = { app, db };
+module.exports = { admin, db, realtimeDb };

@@ -41,8 +41,6 @@ class FirestoreWallet {
     async charge(userId, amount, roundId, cartels = 1) {
         amount = Number(amount);
         if (!Number.isFinite(amount) || amount <= 0) return null;
-
-        const roundKey = String(roundId);
         const userRef = this.db.collection('users').doc(String(userId));
 
         const res = await this.db.runTransaction(async (transaction) => {
@@ -50,30 +48,6 @@ class FirestoreWallet {
             if (!userDoc.exists) return null;
 
             const data = userDoc.data();
-            const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
-
-            const previousPlay = txs.find(t =>
-                String(t.round_id) === roundKey && t.type === 'play'
-            );
-            const alreadyRefunded = txs.some(t =>
-                String(t.round_id) === roundKey && t.type === 'refund'
-            );
-
-            if (previousPlay) {
-                if (alreadyRefunded) return null;
-
-                const previousAmount = Number(previousPlay.amount || 0);
-                if (Math.abs(previousAmount - amount) > 1e-9) {
-                    throw new Error(`Round ${roundKey} charge amount mismatch.`);
-                }
-
-                return {
-                    balance: Number(data.balance || 0),
-                    bonus: Number(data.bonus || 0),
-                    already_charged: true
-                };
-            }
-
             const balance = Number(data.balance || 0);
             const bonus = Number(data.bonus || 0);
 
@@ -84,13 +58,14 @@ class FirestoreWallet {
             const newBalance = Math.max(0, balance - fromMain);
             const newBonus = Math.max(0, bonus - fromBonus);
             const weeklyCartels = (Number(data.weekly_cartels) || 0) + cartels;
+            const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
 
             txs.push({
                 type: 'play',
                 amount,
                 bonus_amount: fromBonus,
                 main_amount: fromMain,
-                round_id: roundKey,
+                round_id: roundId,
                 timestamp: new Date().toISOString()
             });
 
@@ -109,7 +84,6 @@ class FirestoreWallet {
     }
 
     async refund(userId, roundId) {
-        const roundKey = String(roundId);
         const userRef = this.db.collection('users').doc(String(userId));
 
         await this.db.runTransaction(async (transaction) => {
@@ -118,8 +92,8 @@ class FirestoreWallet {
 
             const data = userDoc.data();
             const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
-            const roundTx = txs.find(t => String(t.round_id) === roundKey && t.type === 'play');
-            const alreadyRefunded = txs.some(t => String(t.round_id) === roundKey && t.type === 'refund');
+            const roundTx = txs.find(t => t.round_id === roundId && t.type === 'play');
+            const alreadyRefunded = txs.some(t => t.round_id === roundId && t.type === 'refund');
 
             if (!roundTx || alreadyRefunded) return;
 
@@ -136,7 +110,7 @@ class FirestoreWallet {
                     amount: bonusRefund + mainRefund,
                     bonus_amount: bonusRefund,
                     main_amount: mainRefund,
-                    round_id: roundKey,
+                    round_id: roundId,
                     timestamp: new Date().toISOString()
                 }]
             });
@@ -177,53 +151,18 @@ class FirestoreWallet {
     }
 
     async start_drawing(roundId, tickets) {
-        const roundRef = this.db.collection('rounds').doc(String(roundId));
-
-        await this.db.runTransaction(async transaction => {
-            const roundDoc = await transaction.get(roundRef);
-
-            if (!roundDoc.exists) {
-                throw new Error(`Round ${String(roundId)} does not exist.`);
-            }
-
-            if (roundDoc.data().status !== 'locked') {
-                throw new Error(
-                    `Cannot start drawing for round ${String(roundId)} with status ${roundDoc.data().status}.`
-                );
-            }
-
-            transaction.update(roundRef, {
-                status: 'drawing',
-                tickets
-            });
+        await this.db.collection('rounds').doc(String(roundId)).update({
+            status: 'drawing',
+            tickets
         });
     }
 
     async prepare_settlement(roundId, payouts) {
-        const roundRef = this.db.collection('rounds').doc(String(roundId));
-
-        await this.db.runTransaction(async transaction => {
-            const roundDoc = await transaction.get(roundRef);
-
-            if (!roundDoc.exists) {
-                throw new Error(`Round ${String(roundId)} does not exist.`);
-            }
-
-            const roundData = roundDoc.data();
-
-            if (!['drawing', 'settling'].includes(roundData.status)) {
-                throw new Error(
-                    `Cannot prepare settlement for round ${String(roundId)} with status ${roundData.status}.`
-                );
-            }
-
-            transaction.update(roundRef, {
-                status: 'settling',
-                payouts,
-                settlement_started_at:
-                    roundData.settlement_started_at || new Date().toISOString()
-            });
-        });
+        await this.db.collection('rounds').doc(String(roundId)).set({
+            status: 'settling',
+            payouts,
+            settlement_started_at: new Date().toISOString()
+        }, { merge: true });
     }
 
     async settle(roundId, payouts) {
@@ -237,16 +176,10 @@ class FirestoreWallet {
 
             await this.db.runTransaction(async transaction => {
                 const roundDoc = await transaction.get(roundRef);
-                if (!roundDoc.exists) return;
-
-                const roundData = roundDoc.data();
-                if (roundData.status !== 'settling') return;
-
                 const userDoc = await transaction.get(userRef);
-                if (!userDoc.exists) {
-                    throw new Error(`Settlement user ${userId} does not exist.`);
-                }
+                if (!userDoc.exists) return;
 
+                const roundData = roundDoc.exists ? roundDoc.data() : {};
                 const settledUsers = roundData.settled_users || {};
 
                 if (Object.prototype.hasOwnProperty.call(settledUsers, String(userId))) {
@@ -266,7 +199,6 @@ class FirestoreWallet {
                 transaction.update(userRef, {
                     balance: Number(data.balance || 0) + amount,
                     total_winnings: Number(data.total_winnings || 0) + amount,
-                    won_after_deposit: Boolean(data.won_after_deposit || data.has_deposited),
                     transactions
                 });
 
@@ -282,19 +214,10 @@ class FirestoreWallet {
             this.cache_drop(userId);
         }
 
-        await this.db.runTransaction(async transaction => {
-            const roundDoc = await transaction.get(roundRef);
-            if (!roundDoc.exists) {
-                throw new Error(`Round ${String(roundId)} does not exist.`);
-            }
-
-            if (roundDoc.data().status !== 'settling') return;
-
-            transaction.set(roundRef, {
-                status: 'settled',
-                settled_at: new Date().toISOString()
-            }, { merge: true });
-        });
+        await roundRef.set({
+            status: 'settled',
+            settled_at: new Date().toISOString()
+        }, { merge: true });
     }
 
     async cancel_round(roundId, userIds) {

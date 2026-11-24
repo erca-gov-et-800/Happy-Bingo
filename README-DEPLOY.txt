@@ -1,4 +1,4 @@
-HAPPY BINGO — REAL PLAYERS ONLY BUILD
+TELEGRAM BINGO — UPDATED BUILD
 
 Implemented flows
 - Mandatory Telegram channel join before registration; bot checks membership and asks the user to tap Verify after joining.
@@ -65,12 +65,12 @@ Additional reliability fixes in this ZIP
 - Telegram channel membership results are cached for 30 seconds per Telegram user to avoid a getChatMember call on every one-second game poll. A failed Telegram check is not cached.
 - Paid rounds are recorded in Firebase Realtime Database before drawing begins.
 - Before payouts are applied, the complete payout map is saved to Realtime Database. Each user's win credit is idempotent, so a restart can safely finish an interrupted settlement.
-- On startup, unfinished locked/drawing rounds are refunded to their charged participants; prepared settlements are resumed. The game engine starts only after recovery completes. Synthetic/fake players have been removed; only verified Telegram numeric user IDs can enter a paid round and win. The number draw uses Node.js crypto.randomInt for unbiased shuffle. Deposited players are not excluded from winning.
+- On startup, unfinished locked/drawing rounds are refunded to their charged participants; prepared settlements are resumed. The game engine starts only after recovery completes.
 - Deposit and Withdraw are handled inside the Mini App; the bot keyboard no longer exposes either wallet flow.
 
 How to replace the GitHub project from this ZIP
 1. Download and extract the ZIP on a computer, or use a ZIP/file manager on Android.
-2. Open the extracted Happy Bingo-main folder.
+2. Open the extracted XLitebingo-main folder.
 3. Upload/replace the project files in the connected GitHub repository. Keep the repository root containing server.js, bot.js, users.js, gameroom.js, index.html and package.json (do not upload the outer folder as a nested project folder).
 4. Commit the changes. Render should deploy the new commit automatically; otherwise use Manual Deploy -> Deploy latest commit.
 5. Do not upload BOT_TOKEN or firebase_key.json.
@@ -80,7 +80,7 @@ Validation
 - Static review of the recovery and idempotency paths completed.
 - Live Render, Telegram and Firebase end-to-end checks still need to be performed after deployment. Test with small amounts first and back up Realtime Database before deployment.
 
-Happy Bingo Admin panel additions: separate Main/Bonus balance credit and debit, seven-day transaction summary, deposit/withdrawal review, and Telegram broadcast with audience filters, photo, caption and inline URL button. Deposit accepts a payment reference and/or receipt screenshot in the Mini App; minimum deposit is 100 ETB. Broadcast requires admin Mini App authentication.
+Admin panel additions: separate Main/Bonus balance credit and debit, seven-day transaction summary, deposit/withdrawal review, and Telegram broadcast with audience filters, photo, caption and inline URL button. Deposit accepts a payment reference and/or receipt screenshot in the Mini App; minimum deposit is 100 ETB. Broadcast requires admin Mini App authentication.
 
 Broadcast audience definitions: All = all registered, unblocked users; Verified = users with a saved phone_number from Telegram contact registration; Unverified = users without a saved phone_number. Broadcast supports text-only or JPG/PNG/WEBP photo with caption and optional inline URL button.
 Withdrawal: minimum defaults to 100 ETB (WITHDRAW_MINIMUM_ETB). Player supplies recipient name and Telebirr number; request reserves Main Balance. Admin approval is a confirmation only and the payout must be sent manually through Telebirr.
