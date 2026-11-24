@@ -57,6 +57,12 @@ class FirestoreWallet {
                 t && t.type === 'play' && String(t.round_id) === String(roundId)
             );
             if (existingPlay) {
+                // A refunded play must never become chargeable again on retry.
+                const alreadyRefunded = txs.some(t =>
+                    t && t.type === 'refund' && String(t.round_id) === String(roundId)
+                );
+                if (alreadyRefunded) return null;
+
                 const previousAmount = Number(existingPlay.amount || 0);
                 if (Math.abs(previousAmount - amount) > 1e-9) return null;
                 return { balance, bonus };
