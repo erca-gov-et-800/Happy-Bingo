@@ -1,6 +1,5 @@
-require("dotenv").config();
 const { Telegraf, Markup, session } = require('telegraf');
-const { db } = require('./firebase');
+const { admin, db } = require('./firebase');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN environment variable is required');
@@ -15,7 +14,7 @@ const REGISTRATION_BONUS = Number(process.env.REGISTRATION_BONUS_ETB || 10);
 const REFERRAL_BONUS = Number(process.env.REFERRAL_BONUS_ETB || 20);
 
 const DEPOSIT_MINIMUM = Math.max(100, Number(process.env.DEPOSIT_MINIMUM_ETB || 100));
-const WITHDRAW_MINIMUM = Math.max(100, Number(process.env.WITHDRAW_MINIMUM_ETB || 100));
+const WITHDRAW_MINIMUM = Math.max(1, Number(process.env.WITHDRAW_MINIMUM_ETB || 100));
 const DEPOSIT_INSTRUCTIONS = process.env.DEPOSIT_INSTRUCTIONS ||
     '💰 ሂሳብ ለመሙላት Telebirr ይምረጡ።\n\nአነስተኛ መጠን: 100 ETB\n👤 ስም: Esraeal\n📱 አካውንት: 0949196145\n\nብሩን ከላኩ በኋላ የክፍያ ማረጋገጫ SMS ወይም የደረሰኝ ፎቶ (Screenshot) ይላኩ። አድሚኑ ካረጋገጠው በኋላ Bonus Balance ይጨመራል።';
 const ADMIN_ID_LIST = [...new Set([...ADMIN_IDS])];
@@ -380,11 +379,7 @@ async function beginWalletFlow(ctx, action) {
     const snap = await ref.get();
 
     if (!snap.exists || !snap.data().has_deposited) {
-        return ctx.reply('⛔ ገንዘብ ለማውጣት መጀመሪያ Deposit ማድረግ አለብዎት።');
-    }
-
-    if (!snap.data().won_after_deposit) {
-        return ctx.reply('⛔ Withdrawal ለማድረግ Deposit ካደረጉ በኋላ ቢያንስ አንድ ጌም ማሸነፍ አለብዎት።');
+        return ctx.reply('⛔ ገንዘብ ለማውጣት መጀመሪያ ቢያንስ አንድ ጊዜ Deposit ማድረግ አለብዎት።');
     }
 
     ctx.session.flow = 'withdraw_amount';
@@ -481,7 +476,6 @@ bot.on('text', async ctx => {
                 const d = us.data();
 
                 if (!d.has_deposited) throw new Error('DEPOSIT_REQUIRED');
-                if (!d.won_after_deposit) throw new Error('WIN_AFTER_DEPOSIT_REQUIRED');
 
                 if (Number(d.balance || 0) < amount2) {
                     throw new Error('INSUFFICIENT_BALANCE');
@@ -541,11 +535,7 @@ bot.on('text', async ctx => {
             return ctx.reply(
                 e.message === 'INSUFFICIENT_BALANCE'
                     ? '❌ Main Balance በቂ አይደለም።'
-                    : e.message === 'DEPOSIT_REQUIRED'
-                        ? '⛔ Withdrawal ለማድረግ Deposit ማድረግ አለብዎት።'
-                        : e.message === 'WIN_AFTER_DEPOSIT_REQUIRED'
-                            ? '⛔ Deposit ካደረጉ በኋላ ቢያንስ አንድ ጌም ማሸነፍ አለብዎት።'
-                            : '⚠️ Withdrawal አልተሳካም።'
+                    : '⚠️ Withdrawal አልተሳካም።'
             );
         }
 
@@ -668,56 +658,23 @@ async function reviewRequest(ctx, type, id, approve) {
             const d = userSnap.data();
 
             if (type === 'deposit' && approve) {
-                const depositAmount = Number(r.amount);
-                let addBonus = 0;
-
-                const autoBonusSnap = await tx.get(
-                    db.collection('settings').doc('auto_bonus')
-                );
-
-                if (autoBonusSnap.exists) {
-                    const ab = autoBonusSnap.data();
-
-                    if (ab.enabled && depositAmount >= Number(ab.minDeposit || 0)) {
-                        if (ab.type === 'percent') {
-                            addBonus = (depositAmount * Number(ab.value || 0)) / 100;
-                        } else {
-                            addBonus = Number(ab.value || 0);
-                        }
-                    }
-                }
-
-                const currentBonus = Number(d.bonus || 0);
-                const totalDeposited = Number(d.total_deposited || 0) + depositAmount;
-                const transactions = Array.isArray(d.transactions) ? d.transactions : [];
-                const timestamp = new Date().toISOString();
-
                 tx.update(userRef, {
-                    bonus: currentBonus + depositAmount + addBonus,
-                    total_deposited: totalDeposited,
+                    bonus: Number(d.bonus || 0) + Number(r.amount),
                     has_deposited: true,
                     first_deposit_at: d.first_deposit_at || Date.now(),
                     transactions: [
-                        ...transactions,
+                        ...(d.transactions || []),
                         {
                             type: 'deposit',
                             wallet: 'bonus',
-                            amount: depositAmount,
-                            status: 'approved',
+                            amount: Number(r.amount),
                             request_id: id,
-                            timestamp
-                        },
-                        ...(addBonus > 0 ? [{
-                            type: 'auto_deposit_bonus',
-                            wallet: 'bonus',
-                            amount: addBonus,
-                            status: 'approved',
-                            request_id: id,
-                            timestamp
-                        }] : [])
+                            timestamp: new Date().toISOString()
+                        }
                     ]
                 });
             }
+
             if (type === 'withdrawal' && !approve) {
                 tx.update(userRef, {
                     balance: Number(d.balance || 0) + Number(r.amount),
