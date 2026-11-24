@@ -18,20 +18,20 @@ Build command: npm install
 Start command: npm start
 
 Required environment variables:
-BOT_TOKEN=<new token from @BotFather>
-WEBAPP_URL=https://<your-render-service>.onrender.com
-BOT_CHANNEL_ID=-1004418660495
-BOT_CHANNEL_URL=https://t.me/test16746g
-ADMIN_ID=<main admin Telegram numeric user ID>
+BOT_TOKEN=<9068513994:AAHVkkWBw_OrrfLoeGj0c6-kKy2Xs3vPQy8>
+WEBAPP_URL=https://happy-bingo-app.onrender.com
+BOT_CHANNEL_ID=-9068513994
+BOT_CHANNEL_URL=https://t.me/HappyBingo1256
+ADMIN_ID=<7171741383>
 ADMIN_IDS=<optional comma-separated additional admin Telegram IDs>
 REGISTRATION_BONUS_ETB=10
 REFERRAL_BONUS_ETB=20
-DEPOSIT_INSTRUCTIONS=💰 Telebirr | አነስተኛ 100 ETB | ስም: Esraeal | አካውንት: 0949196145 | SMS ወይም Screenshot ይላኩ።
+DEPOSIT_INSTRUCTIONS=💰 Telebirr | አነስተኛ 100 ETB | ስም: Esraeal | አካውንት: 094122856 | SMS ወይም Screenshot ይላኩ።
 SUPPORT_CONTACT=@your_support_username
 DEPOSIT_MINIMUM_ETB=100
 WITHDRAW_MINIMUM_ETB=100
 TELEBIRR_ACCOUNT_NAME=Esraeal
-TELEBIRR_ACCOUNT_NUMBER=0949196145
+TELEBIRR_ACCOUNT_NUMBER=0912285647
 FIREBASE_KEY_PATH=/etc/secrets/firebase_key.json
 FIREBASE_DATABASE_URL=https://litebingo-513a9-default-rtdb.firebaseio.com
 
