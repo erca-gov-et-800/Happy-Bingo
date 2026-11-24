@@ -100,6 +100,7 @@ class FirestoreWallet {
     }
 
     async refund(userId, roundId) {
+        roundId = String(roundId);
         const userRef = this.db.collection('users').doc(String(userId));
 
         await this.db.runTransaction(async (transaction) => {
@@ -108,8 +109,12 @@ class FirestoreWallet {
 
             const data = userDoc.data();
             const txs = Array.isArray(data.transactions) ? [...data.transactions] : [];
-            const roundTx = txs.find(t => t.round_id === roundId && t.type === 'play');
-            const alreadyRefunded = txs.some(t => t.round_id === roundId && t.type === 'refund');
+            const roundTx = txs.find(t =>
+                t && String(t.round_id) === roundId && t.type === 'play'
+            );
+            const alreadyRefunded = txs.some(t =>
+                t && String(t.round_id) === roundId && t.type === 'refund'
+            );
 
             if (!roundTx || alreadyRefunded) return;
 
